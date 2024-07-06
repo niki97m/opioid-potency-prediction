@@ -1,11 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
-import joblib
-import os
+import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 
 # Title
 st.title("Opioid Adulterant Potency Prediction")
@@ -35,6 +32,18 @@ st.markdown("""
 **This model is specifically designed for predicting the potency of opioid adulterants.** It should not be used for predicting the potency of substances outside this category.
 """)
 
+# Instructions for clients to upload data
+st.markdown("""
+## Instructions for Clients
+1. Prepare your data in a CSV file with the following columns:
+    - Substance: The name of the substance.
+    - EC50_nM: The EC50 value of the substance in nanomolar (nM).
+    - Potency: The potency of the substance relative to DAMGO.
+2. Upload the CSV file using the file uploader below.
+3. The app will automatically perform the modeling and display the results.
+4. Enter the EC50 value in the input box to predict the potency.
+""")
+
 # File upload
 st.markdown("""
 ### Upload CSV File
@@ -51,57 +60,57 @@ if uploaded_file is not None:
     st.write(df.head())
     
     # Features and target
-    X = df[['EC50_nM']]
+    X = df['EC50_nM']
     y = df['Potency']
     
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Create interpolation function
+    interpolation_function = interp1d(X, y, fill_value="extrapolate")
     
-    # Initialize and train model
-    model = LinearRegression()
-    model.fit(X_train, y_train)
+    # Plot EC50 vs Potency
+    plt.style.use('ggplot')
+    fig, ax = plt.subplots()
+    ax.plot(X, y, 'o', label='Data Points', color='blue')
     
-    # Save the model
-    model_path = os.path.expanduser('potency_prediction_model.pkl')
-    joblib.dump(model, model_path)
-    st.write(f"Model saved to {model_path}")
+    # Interpolation line
+    X_new = np.linspace(X.min(), X.max(), 500)
+    y_new = interpolation_function(X_new)
+    y_new = np.clip(y_new, 0, None)  # Ensure predicted potency is not negative
+    ax.plot(X_new, y_new, '--', label='Predictive Model', color='orange')
     
-    # Predictions
-    y_pred = model.predict(X_test)
-    
-    # Evaluation
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    
-    st.write(f'Mean Squared Error: {mse}')
-    st.write(f'R-squared: {r2}')
+    # Customize plot
+    ax.set_xlabel('EC50 (nM)')
+    ax.set_ylabel('Potency')
+    ax.set_title('EC50 vs Potency')
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    st.pyplot(fig)
     
     # Input for prediction
     st.markdown("""
     ### Input EC50 Value for Prediction
     Please enter the EC50 value in nM (nanomolar). The EC50 value helps us understand the concentration required to achieve half of the substance's maximal effect.
     """)
-    ec50_value = st.number_input('Enter EC50 value in nM', min_value=0.0, step=0.001)
-    
-    if st.button('Predict Potency'):
-        prediction = model.predict(np.array([[ec50_value]]))
-        st.write(f'The predicted potency relative to DAMGO is: {prediction[0]:.2f}x')
-    
-    # Footer with additional information
-    st.markdown("""
-    ## Additional Information
-    This prediction is based on a linear regression model trained on a dataset of various opioid adulterants. The model predicts the relative potency of an adulterant based on its EC50 value.
-    For more detailed information on the data and methodology, please refer to the documentation.
-    """)
+    ec50_value = st.text_input('Enter EC50 value in nM', value="", placeholder="Enter a value greater than 0")
 
-# Instructions for clients to upload data
+    if ec50_value:
+        try:
+            ec50_value = float(ec50_value)
+            if ec50_value > 0:
+                if st.button('Predict Potency'):
+                    prediction = interpolation_function(ec50_value)
+                    prediction = np.clip(prediction, 0, None)  # Ensure predicted potency is not negative
+                    st.write(f'The predicted potency relative to DAMGO is: {prediction:.2f}x')
+            else:
+                st.write("Please enter a valid EC50 value greater than 0.")
+        except ValueError:
+            st.write("Please enter a valid numerical value.")
+
+# Footer with additional information
 st.markdown("""
-## Instructions for Clients
-1. Prepare your data in a CSV file with the following columns:
-    - Substance: The name of the substance.
-    - EC50_nM: The EC50 value of the substance in nanomolar (nM).
-    - Potency: The potency of the substance relative to DAMGO.
-2. Upload the CSV file using the file uploader above.
-3. The app will automatically perform the modeling and display the results.
-4. Enter the EC50 value in the input box to predict the potency.
+## Additional Information
+This prediction is based on an interpolation model trained on a dataset of various opioid adulterants. The model predicts the relative potency of an adulterant based on its EC50 value.
+The model and web app are able to predict the potency of opioids as the data evolves and we have more data to make predictions based on them. It is an interactive dashboard that can be easily worked with by providing updated data.
+**Data should be in CSV format with the following columns: `Substance`, `EC50_nM`, `Potency`.**
 """)

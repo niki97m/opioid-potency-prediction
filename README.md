@@ -109,8 +109,6 @@ The main application code (`app.py`) is structured as follows:
 10. **Footer**: Adding additional information about the model and data requirements.
 
 
-Please ensure your code adheres to the project's coding standards and include tests for new features.
-
 ## Contact
 
 For questions, suggestions, or collaborations, please contact:
